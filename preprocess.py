@@ -79,4 +79,4 @@ for session in SESSIONS:
 # Save metadata
 df = pd.DataFrame(metadata)
 df.to_csv(CSV_OUT, index=False)
-print(f"✅ Preprocessing complete. Metadata saved to {CSV_OUT}")
+print(f"Preprocessing complete. Metadata saved to {CSV_OUT}")
