@@ -1,0 +1,14 @@
+Metric,Value
+total_utterances,5531
+unique_utt_ids,5531
+emotion_counts,"{'neutral': 1708, 'happy': 1636, 'angry': 1103, 'sad': 1084}"
+session_counts,"{'Session5': 1241, 'Session3': 1151, 'Session1': 1085, 'Session4': 1031, 'Session2': 1023}"
+missing_emotions,0
+missing_mfcc_files,0
+total_transcriptions,10213
+missing_transcriptions,0
+vocabulary_size,1880
+avg_text_length,14.630373053950846
+total_mfcc_files,5531
+avg_mfcc_seq_length,754.4265051527752
+mfcc_dimensions,13

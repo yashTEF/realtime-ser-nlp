@@ -1,103 +1,157 @@
 import torch
 import numpy as np
-import argparse
-import os
+import pandas as pd
 import librosa
-import torch.nn as nn
+import whisper
+import nltk
+from tqdm import tqdm
+from pathlib import Path
 
-# Constants
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-N_MFCC = 13  # Number of MFCC features
-
-# ==============================
-# Model
-# ==============================
-class EmotionVADRegressor(nn.Module):
-    def __init__(self, input_dim=13, hidden_dim=128):
-        super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
-        self.regressor = nn.Sequential(
-            nn.Linear(hidden_dim, 3),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        _, (hn, _) = self.lstm(x)
-        out = self.regressor(hn[-1])
-        return out * 4 + 1  # Rescale to [1, 5]
-
-def extract_mfcc_features(file_path, start, end, max_len=128):
+def streaming_inference(model, audio_path, word2idx, embedding_matrix, mfcc_mean, mfcc_std, emotion_classes, 
+                       chunk_duration=3.0, max_length=128, n_mfcc=13, max_audio_length=300, device='cuda', 
+                       output_csv='/kaggle/working/streaming_inference_results.csv'):
     """
-    Loads an audio file, extracts the segment from start to end (in seconds),
-    and computes MFCC features.
-    """
-    # Load audio segment
-    y, sr = librosa.load(file_path, sr=None, offset=start, duration=end-start)
+    Perform streaming inference on a WAV file using a multimodal emotion classifier.
     
-    # Extract MFCC features
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC)
-    mfcc = mfcc.T  # Transpose to get time steps as first dimension
+    Args:
+        model: Trained Multimodal_LSTMEmotionClassifier model.
+        audio_path (str): Path to the input WAV file.
+        word2idx (dict): Vocabulary mapping words to indices.
+        embedding_matrix (torch.Tensor): Pretrained embedding matrix.
+        mfcc_mean (torch.Tensor): Mean for MFCC normalization.
+        mfcc_std (torch.Tensor): Standard deviation for MFCC normalization.
+        emotion_classes (list): List of emotion labels (e.g., ['angry', 'happy', 'sad', 'neutral']).
+        chunk_duration (float): Duration of each audio chunk in seconds (default: 3.0).
+        max_length (int): Maximum text sequence length (default: 128).
+        n_mfcc (int): Number of MFCC coefficients (default: 13).
+        max_audio_length (int): Maximum audio sequence length in frames (default: 300).
+        device (str): Device to run inference on (default: 'cuda').
+        output_csv (str): Path to save inference results (default: '/kaggle/working/streaming_inference_results.csv').
     
-    # Handle padding/truncation similar to training
-    if max_len:
-        T = mfcc.shape[0]
-        if T < max_len:
-            # Pad with zeros
-            pad = np.zeros((max_len - T, mfcc.shape[1]))
-            mfcc = np.concatenate([mfcc, pad], axis=0)
-        else:
-            # Truncate
-            mfcc = mfcc[:max_len]
-    
-    # Convert to tensor
-    mfcc_tensor = torch.tensor(mfcc, dtype=torch.float32)
-    return mfcc_tensor
-
-def predict_attributes(model, mfcc_features):
+    Returns:
+        list: List of dictionaries containing inference results for each chunk.
     """
-    Runs inference on a single MFCC feature set.
-    Returns a dictionary with predicted valence, arousal, and dominance.
-    """
+    # Initialize
     model.eval()
-    with torch.no_grad():
-        mfcc_features = mfcc_features.to(DEVICE).unsqueeze(0)  # Add batch dimension
-        predictions = model(mfcc_features)
-        predictions = predictions.cpu().numpy()[0]  # Remove batch dimension
+    model.to(device)
+    idx_to_emotion = {idx: emo for idx, emo in enumerate(emotion_classes)}
+    results = []
+    context_texts = []  # Store up to 5 previous transcriptions
+    
+    # Load Whisper model
+    try:
+        whisper_model = whisper.load_model("tiny")
+    except Exception as e:
+        print(f"Error loading Whisper model: {e}")
+        raise
+    
+    # Load audio
+    try:
+        audio, sr = librosa.load(audio_path, sr=16000, mono=True)
+    except Exception as e:
+        print(f"Error loading audio file {audio_path}: {e}")
+        raise
+    
+    # Calculate chunk parameters
+    chunk_samples = int(chunk_duration * sr)
+    total_duration = len(audio) / sr
+    num_chunks = int(np.ceil(total_duration / chunk_duration))
+    
+    print(f"Processing audio: {audio_path}")
+    print(f"Total duration: {total_duration:.2f}s, Chunks: {num_chunks}, Chunk duration: {chunk_duration}s")
+    
+    for chunk_idx in tqdm(range(num_chunks), desc="Processing audio chunks"):
+        # Extract chunk
+        start_sample = chunk_idx * chunk_samples
+        end_sample = min((chunk_idx + 1) * chunk_samples, len(audio))
+        chunk_audio = audio[start_sample:end_sample]
+        chunk_start = start_sample / sr
+        chunk_end = end_sample / sr
         
-        return {
-            'valence': predictions[0],
-            'arousal': predictions[1],
-            'dominance': predictions[2]
+        # Extract MFCC
+        try:
+            mfcc = librosa.feature.mfcc(y=chunk_audio, sr=sr, n_mfcc=n_mfcc, n_fft=2048, hop_length=512)
+            mfcc = torch.tensor(mfcc.T, dtype=torch.float32)  # [time_frames, n_mfcc]
+        except Exception as e:
+            print(f"Error extracting MFCC for chunk {chunk_idx}: {e}")
+            continue
+        
+        # Normalize MFCC
+        mfcc = (mfcc - mfcc_mean) / (mfcc_std + 1e-8)
+        
+        # Compute sequence length
+        seq_len = min(mfcc.shape[0], max_audio_length)
+        
+        # Pad or truncate MFCC
+        if mfcc.shape[0] < max_audio_length:
+            pad = torch.zeros((max_audio_length - mfcc.shape[0], mfcc.shape[1]))
+            mfcc = torch.cat([mfcc, pad], dim=0)
+        else:
+            mfcc = mfcc[:max_audio_length]
+        
+        # Transcribe chunk
+        try:
+            # Save chunk temporarily for Whisper
+            temp_wav = f"/tmp/chunk_{chunk_idx}.wav"
+            librosa.output.write_wav(temp_wav, chunk_audio, sr)
+            result = whisper_model.transcribe(temp_wav, language='en')
+            transcription = result['text'].strip()
+            Path(temp_wav).unlink(missing_ok=True)
+        except Exception as e:
+            print(f"Error transcribing chunk {chunk_idx}: {e}")
+            transcription = ""
+        
+        # Update context
+        if transcription:
+            context_texts.append(transcription)
+            if len(context_texts) > 5:
+                context_texts.pop(0)
+        else:
+            context_texts.append("")  # Empty transcription for failed chunks
+        
+        # Prepare text input
+        context_text = " ".join(context_texts)
+        tokens = nltk.word_tokenize(context_text.lower())[:max_length]
+        input_ids = [word2idx.get(token, word2idx['<UNK>']) for token in tokens]
+        if len(input_ids) < max_length:
+            input_ids += [word2idx['<PAD>']] * (max_length - len(input_ids))
+        input_ids = torch.tensor([input_ids], dtype=torch.long)  # [1, max_length]
+        
+        # Prepare model inputs
+        mfcc = mfcc.unsqueeze(0)  # [1, max_audio_length, n_mfcc]
+        seq_len = torch.tensor([seq_len], dtype=torch.long)  # [1]
+        
+        # Move to device
+        input_ids = input_ids.to(device)
+        mfcc = mfcc.to(device)
+        seq_len = seq_len.to(device)
+        
+        # Inference
+        with torch.no_grad():
+            outputs = model(input_ids, mfcc, seq_len)  # [1, num_classes]
+            probs = torch.softmax(outputs, dim=1)
+            pred_idx = torch.argmax(probs, dim=1).item()
+            pred_emotion = idx_to_emotion[pred_idx]
+            confidence = probs[0, pred_idx].item()
+        
+        # Print results
+        print(f"\nChunk {chunk_idx + 1}: {chunk_start:.2f}s - {chunk_end:.2f}s")
+        print(f"Transcription: {transcription}")
+        print(f"Predicted Emotion: {pred_emotion} (Confidence: {confidence:.4f})")
+        
+        # Store results
+        result = {
+            'chunk_start': chunk_start,
+            'chunk_end': chunk_end,
+            'transcription': transcription,
+            'predicted_emotion': pred_emotion,
+            'confidence': confidence
         }
-
-def main(args):
-    # Load the trained model checkpoint
-    if not os.path.exists(args.checkpoint):
-        raise FileNotFoundError(f"Checkpoint file {args.checkpoint} not found!")
+        results.append(result)
     
-    model = EmotionVADRegressor().to(DEVICE)
-    checkpoint = torch.load(args.checkpoint, map_location=DEVICE)
-    model.load_state_dict(checkpoint)
+    # Save results to CSV
+    output_df = pd.DataFrame(results)
+    output_df.to_csv(output_csv, index=False)
+    print(f"\nInference results saved to {output_csv}")
     
-    # Load and process the audio segment
-    if not os.path.exists(args.audio_file):
-        raise FileNotFoundError(f"Audio file {args.audio_file} not found!")
-    
-    # Extract MFCC features
-    mfcc_features = extract_mfcc_features(args.audio_file, args.start, args.end)
-    
-    # Predict attributes
-    prediction = predict_attributes(model, mfcc_features)
-    
-    print(f"Predicted Attributes for window [{args.start:.2f}s - {args.end:.2f}s]:")
-    print(f"Valence: {prediction['valence']:.2f}, Arousal: {prediction['arousal']:.2f}, Dominance: {prediction['dominance']:.2f}")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Inference script for VAD emotion predictions")
-    parser.add_argument('--audio_file', type=str, required=True, help="Path to the audio file")
-    parser.add_argument('--start', type=float, required=True, help="Start time of the window (in seconds)")
-    parser.add_argument('--end', type=float, required=True, help="End time of the window (in seconds)")
-    parser.add_argument('--checkpoint', type=str, default='vad_regressor.pt', help="Path to the trained model checkpoint")
-    args = parser.parse_args()
-    
-    main(args)
+    return results

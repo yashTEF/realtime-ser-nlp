@@ -6,3 +6,9 @@ numpy
 argparse  # Already part of Python standard library, included for clarity
 tqdm
 librosa
+matplotlib
+nltk
+seaborn
+scikit-learn
+scipy
+

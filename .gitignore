@@ -1,2 +1,4 @@
 IEMOCAP_full_release/*
 .venv/*
+__pycache__/
+models/
