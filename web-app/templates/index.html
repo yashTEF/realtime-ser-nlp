@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Recognition from Audio</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Emotion Recognition</h1>
+        <p class="subtitle">Record or upload audio to analyze emotions using multimodal AI</p>
+
+        <!-- Recording Section -->
+        <div class="recording-section">
+            <button id="recordButton" class="record-button">🎙️ Record Audio</button>
+            <button id="stopButton" class="record-button" disabled>⏹️ Stop Recording</button>
+            <div id="recordingStatus" class="status hidden">
+                <div class="recording-indicator">
+                    <span class="recording-dot"></span>
+                    <span>Recording...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h3>Or upload an audio file</h3>
+            <div class="file-input-wrapper">
+                <input type="file" id="audioFile" class="file-input" accept="audio/*">
+                <label for="audioFile" class="file-input-label">📁 Choose Audio File</label>
+            </div>
+        </div>
+
+        <!-- Status Display -->
+        <div id="status" class="status hidden"></div>
+
+        <!-- Audio Controls -->
+        <div id="audioControls" class="audio-controls hidden">
+            <audio id="audioPlayer" controls></audio>
+            <button id="analyzeButton" class="record-button">🔍 Analyze Emotion</button>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="results hidden">
+            <div id="emotionResult" class="emotion-result">
+                <div class="emotion-name" id="emotionName"></div>
+                <div class="emotion-confidence" id="emotionConfidence"></div>
+            </div>
+            
+            <div class="transcription">
+                <h3>📝 Transcription</h3>
+                <p id="transcriptionText"></p>
+            </div>
+
+            <div class="probabilities">
+                <h3>📊 Emotion Probabilities</h3>
+                <div id="probabilityBars"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let currentAudioBlob = null;
+
+        const recordButton = document.getElementById('recordButton');
+        const stopButton = document.getElementById('stopButton');
+        const audioFile = document.getElementById('audioFile');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioControls = document.getElementById('audioControls');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const status = document.getElementById('status');
+        const results = document.getElementById('results');
+        const recordingStatus = document.getElementById('recordingStatus');
+
+        // Recording functionality
+        recordButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+        audioFile.addEventListener('change', handleFileUpload);
+        if (analyzeButton) {
+            analyzeButton.addEventListener('click', analyzeAudio);
+        }
+
+        async function startRecording() {
+            try {
+                if (!checkBrowserSupport()) {
+                    showStatus('Browser does not support audio recording features.', 'error');
+                    return;
+                }
+                
+                showStatus('Starting recording...', 'info');
+                
+                // Get microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                
+                // Setup MediaRecorder for complete recording
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    // Create complete audio blob from all chunks
+                    currentAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioUrl = URL.createObjectURL(currentAudioBlob);
+                    audioPlayer.src = audioUrl;
+                    showAudioControls();
+                    showStatus('Recording complete! Click analyze to predict emotion.', 'success');
+                };
+                
+                // Start recording
+                mediaRecorder.start();
+                
+                // Update UI
+                recordButton.disabled = true;
+                stopButton.disabled = false;
+                recordingStatus.classList.remove('hidden');
+                
+                showStatus('Recording in progress... Click stop when finished.', 'success');
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+                resetUI();
+            }
+        }
+
+        async function stopRecording() {
+            try {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
+                resetUI();
+                
+            } catch (error) {
+                console.error('Error stopping recording:', error);
+                showStatus(`Error stopping recording: ${error.message}`, 'error');
+                resetUI();
+            }
+        }
+
+        function resetUI() {
+            recordButton.disabled = false;
+            stopButton.disabled = true;
+            recordingStatus.classList.add('hidden');
+        }
+
+        function handleFileUpload() {
+            const file = audioFile.files[0];
+            if (file) {
+                currentAudioBlob = file;
+                const audioUrl = URL.createObjectURL(file);
+                audioPlayer.src = audioUrl;
+                showAudioControls();
+                showStatus('Audio file loaded! Click analyze to predict emotion.', 'success');
+            }
+        }
+
+        async function analyzeAudio() {
+            if (!currentAudioBlob) {
+                showStatus('Please record or upload an audio file first.', 'error');
+                return;
+            }
+
+            try {
+                analyzeButton.disabled = true;
+                analyzeButton.textContent = '🔄 Analyzing...';
+                showStatus('Analyzing audio...', 'info');
+
+                const formData = new FormData();
+                formData.append('audio', currentAudioBlob);
+
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    displayResults(result);
+                    showStatus('Analysis completed successfully!', 'success');
+                } else {
+                    showStatus('Analysis failed: ' + (result.error || 'Unknown error'), 'error');
+                }
+
+            } catch (error) {
+                console.error('Analyze error:', error);
+                showStatus('Error analyzing audio. Please try again or use a different audio file.', 'error');
+            } finally {
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = '🔍 Analyze Emotion';
+            }
+        }
+
+        function displayResults(result) {
+            // Extract emotion prediction from the result
+            const emotionPrediction = result.emotion_prediction;
+            
+            // Main emotion result with enhanced styling
+            const emotionHTML = `
+                <div class="emotion-result">
+                    <div class="emotion-name">${emotionPrediction.predicted_emotion}</div>
+                    <div class="emotion-confidence">${Math.round(emotionPrediction.confidence * 100)}%</div>
+                </div>
+            `;
+            document.getElementById('emotionResult').innerHTML = emotionHTML;
+            
+            // Transcription
+            const transcription = result.transcribed_text || 'No transcription available';
+            console.log('Transcription:', transcription);
+            document.getElementById('transcriptionText').textContent = transcription;
+            
+            // Probability bars
+            const probabilityHTML = Object.entries(emotionPrediction.probabilities).map(([emotion, prob]) => `
+                <div class="probability-bar emotion-${emotion}">
+                    <span class="probability-label">${emotion}</span>
+                    <div class="probability-visual">
+                        <div class="probability-fill" style="width: ${prob * 100}%"></div>
+                    </div>
+                    <span class="probability-value">${Math.round(prob * 100)}%</span>
+                </div>
+            `).join('');
+            
+            document.getElementById('probabilityBars').innerHTML = probabilityHTML;
+            results.classList.remove('hidden');
+        }
+
+        function showAudioControls() {
+            if (audioControls) {
+                audioControls.classList.remove('hidden');
+            }
+        }
+
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.classList.remove('hidden');
+        }
+
+        // Browser compatibility check
+        function checkBrowserSupport() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+                showStatus('Audio recording not supported in this browser. Please use file upload instead.', 'info');
+                return false;
+            }
+            return true;
+        }
+
+        // Initialize
+        checkBrowserSupport();
+    </script>
+</body>
+</html>

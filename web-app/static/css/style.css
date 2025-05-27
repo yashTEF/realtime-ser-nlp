@@ -1,0 +1,476 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 30px;
+  font-size: 2.5em;
+  font-weight: 300;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 40px;
+  font-size: 1.1em;
+  line-height: 1.5;
+}
+
+.recording-section {
+  margin-bottom: 30px;
+}
+
+.record-button {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  padding: 15px 30px;
+  font-size: 1.2em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin: 10px;
+}
+
+.record-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
+}
+
+.record-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.record-button.recording {
+  background: linear-gradient(45deg, #ff4757, #ff3742);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.upload-section {
+  margin: 30px 0;
+  padding: 30px;
+  border: 2px dashed #ddd;
+  border-radius: 15px;
+  background: #fafafa;
+}
+
+.file-input-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-input-label {
+  background: linear-gradient(45deg, #3742fa, #2f3542);
+  color: white;
+  padding: 12px 25px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: all 0.3s ease;
+}
+
+.file-input-label:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(55, 66, 250, 0.3);
+}
+
+.status {
+  margin: 20px 0;
+  padding: 15px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.status.info {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #bbdefb;
+}
+
+.status.error {
+  background: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+}
+
+.status.success {
+  background: #e8f5e8;
+  color: #388e3c;
+  border: 1px solid #c8e6c9;
+}
+
+.results {
+  margin-top: 30px;
+  padding: 30px;
+  background: #f8f9fa;
+  border-radius: 15px;
+  text-align: left;
+}
+
+.emotion-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.emotion-name {
+  font-size: 1.3em;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.emotion-confidence {
+  font-size: 1.2em;
+  font-weight: 700;
+  color: #2ecc71;
+}
+
+.transcription {
+  margin-top: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 10px;
+  border-left: 4px solid #3498db;
+}
+
+.transcription h3 {
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.transcription p {
+  color: #666;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.probabilities {
+  margin-top: 20px;
+}
+
+.probability-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.probability-label {
+  width: 80px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.probability-visual {
+  flex: 1;
+  height: 25px;
+  background: #e0e0e0;
+  border-radius: 12px;
+  margin: 0 10px;
+  overflow: hidden;
+}
+
+.probability-fill {
+  height: 100%;
+  border-radius: 12px;
+  transition: width 0.5s ease;
+}
+
+.probability-value {
+  width: 50px;
+  text-align: right;
+  font-weight: 500;
+}
+
+.emotion-angry .probability-fill {
+  background: linear-gradient(45deg, #ff4757, #ff3742);
+}
+.emotion-happy .probability-fill {
+  background: linear-gradient(45deg, #ffa502, #ff6348);
+}
+.emotion-sad .probability-fill {
+  background: linear-gradient(45deg, #3742fa, #2f3542);
+}
+.emotion-neutral .probability-fill {
+  background: linear-gradient(45deg, #57606f, #2f3542);
+}
+
+.audio-controls {
+  margin: 20px 0;
+}
+
+audio {
+  width: 100%;
+  margin: 10px 0;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Real-time prediction styles */
+.realtime-results {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 15px;
+  padding: 25px;
+  margin: 20px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.realtime-results h3 {
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 1.5em;
+}
+
+.live-prediction {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.current-emotion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.emotion-label,
+.text-label {
+  font-weight: bold;
+  color: #fff;
+}
+
+.emotion-value {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.confidence-value {
+  background: rgba(76, 175, 80, 0.3);
+  padding: 3px 10px;
+  border-radius: 15px;
+  font-size: 0.9em;
+}
+
+.partial-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.text-value {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8px 15px;
+  border-radius: 8px;
+  font-style: italic;
+  flex: 1;
+  min-height: 20px;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.recording-dot {
+  width: 12px;
+  height: 12px;
+  background: #e74c3c;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.emotion-bars {
+  margin: 20px 0;
+}
+
+.emotion-bar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 15px;
+}
+
+.emotion-name {
+  min-width: 100px;
+  font-weight: bold;
+}
+
+.bar-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar {
+  height: 20px;
+  border-radius: 10px;
+  transition: width 0.3s ease;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.angry-bar {
+  background: linear-gradient(90deg, #ff4757, #ff3838);
+}
+.happy-bar {
+  background: linear-gradient(90deg, #2ed573, #1e90ff);
+}
+.sad-bar {
+  background: linear-gradient(90deg, #3742fa, #5352ed);
+}
+.neutral-bar {
+  background: linear-gradient(90deg, #747d8c, #57606f);
+}
+
+.bar-value {
+  min-width: 40px;
+  text-align: right;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.session-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 0.9em;
+}
+
+/* Animation for real-time updates */
+.emotion-value,
+.confidence-value,
+.text-value {
+  transition: all 0.3s ease;
+}
+
+.emotion-value.updated {
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+/* Final results styles */
+.final-summary {
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  border-radius: 15px;
+  padding: 25px;
+  margin: 20px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.final-summary h3 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.final-emotion {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.final-emotion strong {
+  color: #e74c3c;
+}
+
+.session-stats p {
+  margin: 8px 0;
+  color: #34495e;
+}
+
+.confidence-trend {
+  margin-top: 15px;
+  padding: 15px;
+  background: #ecf0f1;
+  border-radius: 8px;
+}
+
+.final-indicator {
+  background: rgba(46, 204, 113, 0.2);
+  border: 2px solid #2ecc71;
+  border-radius: 10px;
+  padding: 15px;
+  margin-top: 20px;
+  text-align: center;
+  color: #27ae60;
+  font-weight: bold;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 20px;
+    margin: 10px;
+  }
+
+  h1 {
+    font-size: 2em;
+  }
+
+  .record-button {
+    padding: 12px 25px;
+    font-size: 1.1em;
+  }
+}
