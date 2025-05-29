@@ -3,3 +3,5 @@ IEMOCAP_full_release/*
 __pycache__/
 # models/*
 */certs/*
+mfcc_regression
+models
